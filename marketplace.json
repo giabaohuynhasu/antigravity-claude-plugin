@@ -1,0 +1,28 @@
+{
+  "name": "antigravity-marketplace",
+  "version": "1.0.0",
+  "description": "Official Antigravity Research Marketplace & Multi-Agent Skills for Claude Cowork",
+  "author": {
+    "name": "Gia Bao Huynh (Jun)",
+    "email": "huynhbao@asu.edu",
+    "url": "https://giabaohuynhasu.github.io/research-landing/"
+  },
+  "homepage": "https://giabaohuynhasu.github.io/research-landing/",
+  "plugins": [
+    {
+      "id": "antigravity",
+      "name": "Antigravity Research Suite",
+      "version": "1.0.0",
+      "description": "Master Antigravity Research Copilot, Python 3.14 Execution, DuckDB, NotebookLM, and Research Automation",
+      "path": ".",
+      "source": ".",
+      "homepage": "https://giabaohuynhasu.github.io/research-landing/",
+      "skills": [
+        "antigravity",
+        "alrp-queueing",
+        "cna-census",
+        "mcp-builder"
+      ]
+    }
+  ]
+}
