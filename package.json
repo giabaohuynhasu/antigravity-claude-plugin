@@ -1,0 +1,14 @@
+{
+  "name": "antigravity-mcp-server",
+  "version": "1.0.0",
+  "description": "Antigravity Research Copilot MCP Server for Claude Cowork & Desktop",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "zod": "^3.24.0"
+  }
+}
