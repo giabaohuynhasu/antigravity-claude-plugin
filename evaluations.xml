@@ -1,0 +1,22 @@
+<evaluation>
+  <qa_pair>
+    <question>Use the Antigravity DuckDB tool to find the MITRE direct share of CVE assignments in 1999 and 2026 from the CNA census results. What was the exact percentage drop?</question>
+    <answer>From 99.68% in 1999 to 3.66% in 2026 (a drop of 96.02 percentage points).</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Use the Antigravity Python tool to calculate the critical transition horizon t* for ALRP where lambda(t) crosses mu = 0.052 patches/day given lambda_0 = 0.015 and alpha = 0.18.</question>
+    <answer>6.91 years</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the master synthesis report for Claude and identify the primary methodological flaw in the paper 'Certifying Ghosts' (arXiv:2607.07109).</question>
+    <answer>Right-truncation / observation window bias caused by comparing unadjusted cohorts with asymmetric observation horizons (8 years vs less than 240 days).</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Use DuckDB to check the total population of CVE records analyzed across all 10 benchmark years in the CNA census.</question>
+    <answer>223,205</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>What is the exponential growth rate b of housing permits in the null-case domain test, and does it support queueing divergence?</question>
+    <answer>b = -0.0025/year (R^2 = -0.0033), confirming zero compounding acceleration and rejecting queueing divergence.</answer>
+  </qa_pair>
+</evaluation>
