@@ -5,7 +5,7 @@
     "email": "huynhbao@asu.edu"
   },
   "metadata": {
-    "description": "Official Antigravity Research Suite plugin providing Python 3.14 compute, DuckDB SQL, and research capabilities for Claude Cowork",
+    "description": "Official Antigravity Research Marketplace & Multi-Agent Skills for Claude Cowork",
     "version": "1.0.0"
   },
   "plugins": [
