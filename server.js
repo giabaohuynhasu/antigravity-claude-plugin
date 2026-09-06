@@ -16,7 +16,7 @@ import path from "path";
 const WORKSPACE_DIR = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch";
 const VAULT_DIR = "C:\\Users\\nswcl\\OneDrive\\Documents\\Obsidian Vault";
 const CLAUDE_USER_DIR = "C:\\Users\\nswcl\\Claude";
-const PYTHON_EXE = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch\\.venv\\Scripts\\python.exe";
+export const PYTHON_EXE = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch\\.venv\\Scripts\\python.exe";
 const NLM_EXE = "C:\\Users\\nswcl\\.local\\bin\\nlm.exe";
 
 // Initialize MCP Server
@@ -26,39 +26,49 @@ const server = new McpServer({
 });
 
 // Helper for command execution
-function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
-  return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
-      cwd,
-      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-      timeout: timeoutMs
-    });
+export const utils = {
+  runPowerShell: function (command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
+    return new Promise((resolve) => {
+      const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
+        cwd,
+        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        timeout: timeoutMs
+      });
 
-    let stdout = "";
-    let stderr = "";
+      let stdout = "";
+      let stderr = "";
 
-    child.stdout.on("data", (data) => {
-      stdout += data.toString("utf-8");
-    });
+      child.stdout.on("data", (data) => {
+        stdout += data.toString("utf-8");
+      });
 
-    child.stderr.on("data", (data) => {
-      stderr += data.toString("utf-8");
-    });
+      child.stderr.on("data", (data) => {
+        stderr += data.toString("utf-8");
+      });
 
-    child.on("close", (code) => {
-      const output = stdout.trim();
-      const err = stderr.trim();
-      if (code === 0) {
-        resolve(output || "[Command finished successfully with no stdout]");
-      } else {
-        resolve(`[Exit Code ${code}]\n${output}\n${err ? "STDERR:\n" + err : ""}`);
-      }
-    });
+      child.on("close", (code) => {
+        const output = stdout.trim();
+        const err = stderr.trim();
+        if (code === 0) {
+          resolve(output || "[Command finished successfully with no stdout]");
+        } else {
+          resolve(`[Exit Code ${code}]\n${output}\n${err ? "STDERR:\n" + err : ""}`);
+        }
+      });
 
-    child.on("error", (err) => {
-      resolve(`[Process Error]: ${err.message}`);
+      child.on("error", (err) => {
+        resolve(`[Process Error]: ${err.message}`);
+      });
     });
-  });
+  }
+};
+
+export async function handlePythonCalc({ code }) {
+  const escapedCode = code.replace(/"/g, '\\"');
+  const result = await utils.runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
+  return {
+    content: [{ type: "text", text: result }]
+  };
 }
 
 // Tool 1: Run Python Code in Research .venv
@@ -67,13 +77,7 @@ server.tool(
   {
     code: z.string().describe("Python 3.14 code to execute. Has access to numpy, scipy, pandas, duckdb, boto3, sympy, matplotlib.")
   },
-  async ({ code }) => {
-    const escapedCode = code.replace(/"/g, '\\"');
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
-    return {
-      content: [{ type: "text", text: result }]
-    };
-  }
+  handlePythonCalc
 );
 
 // Tool 2: Execute PowerShell Terminal Command
@@ -83,7 +87,7 @@ server.tool(
     command: z.string().describe("PowerShell command to execute in the Antigravity research workspace.")
   },
   async ({ command }) => {
-    const result = await runPowerShell(command);
+    const result = await utils.runPowerShell(command);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -172,7 +176,7 @@ con = duckdb.connect()
 df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await utils.runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -187,7 +191,7 @@ server.tool(
     notebookId: z.string().default("24fb3456-0d1a-4e3d-864b-952523aa982f").describe("Notebook UUID (defaults to Antigravity RESEARCH SANDBOX).")
   },
   async ({ query, notebookId }) => {
-    const result = await runPowerShell(`& "${NLM_EXE}" query "${notebookId}" "${query.replace(/"/g, '`"')}"`);
+    const result = await utils.runPowerShell(`& "${NLM_EXE}" query "${notebookId}" "${query.replace(/"/g, '`"')}"`);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -219,7 +223,7 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.send_message(msg)
 print("[✓ Email sent successfully to ${recipient}]")
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await utils.runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -234,7 +238,9 @@ async function main() {
   console.error("⚡ Antigravity Node MCP Server running on stdio transport");
 }
 
-main().catch((err) => {
-  console.error("Fatal server error:", err);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    console.error("Fatal server error:", err);
+    process.exit(1);
+  });
+}
