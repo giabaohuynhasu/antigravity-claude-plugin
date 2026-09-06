@@ -25,6 +25,15 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
+// String Escaping Utilities
+function escapeDoubleQuotes(str) {
+  return str.replace(/"/g, '\\"');
+}
+
+function escapeDoubleQuotesPowershell(str) {
+  return str.replace(/"/g, '`"');
+}
+
 // Helper for command execution
 function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
@@ -68,7 +77,7 @@ server.tool(
     code: z.string().describe("Python 3.14 code to execute. Has access to numpy, scipy, pandas, duckdb, boto3, sympy, matplotlib.")
   },
   async ({ code }) => {
-    const escapedCode = code.replace(/"/g, '\\"');
+    const escapedCode = escapeDoubleQuotes(code);
     const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
     return {
       content: [{ type: "text", text: result }]
@@ -169,10 +178,10 @@ server.tool(
     const script = `
 import duckdb
 con = duckdb.connect()
-df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
+df = con.execute("""${escapeDoubleQuotes(sqlQuery)}""").df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapeDoubleQuotes(script)}"`);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -187,7 +196,7 @@ server.tool(
     notebookId: z.string().default("24fb3456-0d1a-4e3d-864b-952523aa982f").describe("Notebook UUID (defaults to Antigravity RESEARCH SANDBOX).")
   },
   async ({ query, notebookId }) => {
-    const result = await runPowerShell(`& "${NLM_EXE}" query "${notebookId}" "${query.replace(/"/g, '`"')}"`);
+    const result = await runPowerShell(`& "${NLM_EXE}" query "${notebookId}" "${escapeDoubleQuotesPowershell(query)}"`);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -208,10 +217,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-msg = MIMEText("""${bodyText.replace(/"/g, '\\"')}""", "plain", "utf-8")
+msg = MIMEText("""${escapeDoubleQuotes(bodyText)}""", "plain", "utf-8")
 msg["From"] = formataddr(("Claude & Gemini Spark Copilot", "thuaquan228@gmail.com"))
 msg["To"] = formataddr(("Gia Bao Huynh (Jun)", "${recipient}"))
-msg["Subject"] = """${subject.replace(/"/g, '\\"')}"""
+msg["Subject"] = """${escapeDoubleQuotes(subject)}"""
 
 with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.starttls()
@@ -219,7 +228,7 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.send_message(msg)
 print("[✓ Email sent successfully to ${recipient}]")
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapeDoubleQuotes(script)}"`);
     return {
       content: [{ type: "text", text: result }]
     };
