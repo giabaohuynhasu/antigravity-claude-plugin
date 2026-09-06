@@ -203,19 +203,30 @@ server.tool(
     recipient: z.string().default("huynhbao@asu.edu").describe("Recipient email address.")
   },
   async ({ subject, bodyText, recipient }) => {
+    const smtpEmail = process.env.SMTP_EMAIL;
+    const smtpPassword = process.env.SMTP_PASSWORD;
+
+    if (!smtpEmail || !smtpPassword) {
+      return {
+        content: [{ type: "text", text: "[Error: SMTP_EMAIL and SMTP_PASSWORD environment variables must be set]" }],
+        isError: true
+      };
+    }
+
     const script = `
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
 msg = MIMEText("""${bodyText.replace(/"/g, '\\"')}""", "plain", "utf-8")
-msg["From"] = formataddr(("Claude & Gemini Spark Copilot", "thuaquan228@gmail.com"))
+msg["From"] = formataddr(("Claude & Gemini Spark Copilot", os.environ.get("SMTP_EMAIL")))
 msg["To"] = formataddr(("Gia Bao Huynh (Jun)", "${recipient}"))
 msg["Subject"] = """${subject.replace(/"/g, '\\"')}"""
 
 with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.starttls()
-    server.login("thuaquan228@gmail.com", "tftgqgjmfifdmtzz")
+    server.login(os.environ.get("SMTP_EMAIL"), os.environ.get("SMTP_PASSWORD"))
     server.send_message(msg)
 print("[✓ Email sent successfully to ${recipient}]")
 `;
