@@ -97,41 +97,36 @@ server.tool(
     filePath: z.string().describe("Relative or absolute path to read from Antigravity workspace, Claude folder, or Obsidian Vault.")
   },
   async ({ filePath }) => {
-    let resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
-    try {
-      await fs.access(resolved);
-    } catch {
-      // Check in Obsidian Vault
-      const vaultPath = path.join(VAULT_DIR, filePath);
-      try {
-        await fs.access(vaultPath);
-        resolved = vaultPath;
-      } catch {
-        // Check in Claude folder
-        const claudePath = path.join(CLAUDE_USER_DIR, filePath);
-        try {
-          await fs.access(claudePath);
-          resolved = claudePath;
-        } catch {
-          return {
-            content: [{ type: "text", text: `[Error: File not found in workspace, vault, or Claude folder: ${filePath}]` }],
-            isError: true
-          };
-        }
+    const paths = [
+      path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath),
+      path.join(VAULT_DIR, filePath),
+      path.join(CLAUDE_USER_DIR, filePath)
+    ];
+
+    const results = await Promise.allSettled(paths.map(p => fs.readFile(p, "utf-8")));
+
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        return {
+          content: [{ type: "text", text: result.value }]
+        };
       }
     }
 
-    try {
-      const data = await fs.readFile(resolved, "utf-8");
-      return {
-        content: [{ type: "text", text: data }]
-      };
-    } catch (e) {
-      return {
-        content: [{ type: "text", text: `[Read Error: ${e.message}]` }],
-        isError: true
-      };
+    // If we get here, none of the paths worked
+    // We'll just grab the first error for reporting, though typically it's "ENOENT"
+    const firstError = results[0].reason;
+    if (results.every(r => r.status === "rejected" && r.reason.code === "ENOENT")) {
+        return {
+          content: [{ type: "text", text: `[Error: File not found in workspace, vault, or Claude folder: ${filePath}]` }],
+          isError: true
+        };
     }
+
+    return {
+      content: [{ type: "text", text: `[Read Error: ${firstError.message}]` }],
+      isError: true
+    };
   }
 );
 
