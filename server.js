@@ -169,7 +169,7 @@ server.tool(
     const script = `
 import duckdb
 con = duckdb.connect()
-df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
+df = con.execute("""${sqlQuery.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}""").df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
     const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
@@ -208,10 +208,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-msg = MIMEText("""${bodyText.replace(/"/g, '\\"')}""", "plain", "utf-8")
+msg = MIMEText("""${bodyText.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}""", "plain", "utf-8")
 msg["From"] = formataddr(("Claude & Gemini Spark Copilot", "thuaquan228@gmail.com"))
 msg["To"] = formataddr(("Gia Bao Huynh (Jun)", "${recipient}"))
-msg["Subject"] = """${subject.replace(/"/g, '\\"')}"""
+msg["Subject"] = """${subject.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"""
 
 with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.starttls()
