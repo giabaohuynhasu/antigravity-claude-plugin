@@ -8,7 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { exec, spawn } from "child_process";
+import child_process from "child_process";
 import fs from "fs/promises";
 import path from "path";
 
@@ -28,7 +28,7 @@ const server = new McpServer({
 // Helper for command execution
 function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
+    const child = child_process.spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
       cwd,
       env: { ...process.env, PYTHONIOENCODING: "utf-8" },
       timeout: timeoutMs
@@ -226,6 +226,8 @@ print("[✓ Email sent successfully to ${recipient}]")
   }
 );
 
+export { runPowerShell };
+
 // Start Server with Stdio Transport
 async function main() {
   const transport = new StdioServerTransport();
@@ -234,7 +236,10 @@ async function main() {
   console.error("⚡ Antigravity Node MCP Server running on stdio transport");
 }
 
-main().catch((err) => {
-  console.error("Fatal server error:", err);
-  process.exit(1);
-});
+import url from 'url';
+if (process.argv[1] === url.fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error("Fatal server error:", err);
+    process.exit(1);
+  });
+}
