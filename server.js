@@ -25,6 +25,20 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
+// Allowed Directories for Path Validation
+const ALLOWED_DIRS = [WORKSPACE_DIR, VAULT_DIR, CLAUDE_USER_DIR].map(d => path.resolve(d));
+
+function isSafePath(targetPath, baseDir = WORKSPACE_DIR) {
+  const resolvedPath = path.isAbsolute(targetPath)
+    ? path.resolve(targetPath)
+    : path.resolve(baseDir, targetPath);
+
+  return ALLOWED_DIRS.some(dir => {
+    const relative = path.relative(dir, resolvedPath);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  });
+}
+
 // Helper for command execution
 function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
@@ -97,18 +111,27 @@ server.tool(
     filePath: z.string().describe("Relative or absolute path to read from Antigravity workspace, Claude folder, or Obsidian Vault.")
   },
   async ({ filePath }) => {
-    let resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
+    let resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(WORKSPACE_DIR, filePath);
+
+    // Validate path
+    if (!isSafePath(filePath, WORKSPACE_DIR) && !isSafePath(filePath, VAULT_DIR) && !isSafePath(filePath, CLAUDE_USER_DIR)) {
+      return {
+        content: [{ type: "text", text: `[Error: Access denied to path outside allowed directories]` }],
+        isError: true
+      };
+    }
+
     try {
       await fs.access(resolved);
     } catch {
       // Check in Obsidian Vault
-      const vaultPath = path.join(VAULT_DIR, filePath);
+      const vaultPath = path.resolve(VAULT_DIR, filePath);
       try {
         await fs.access(vaultPath);
         resolved = vaultPath;
       } catch {
         // Check in Claude folder
-        const claudePath = path.join(CLAUDE_USER_DIR, filePath);
+        const claudePath = path.resolve(CLAUDE_USER_DIR, filePath);
         try {
           await fs.access(claudePath);
           resolved = claudePath;
@@ -143,7 +166,15 @@ server.tool(
     content: z.string().describe("Content to write into the file.")
   },
   async ({ filePath, content }) => {
-    const resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
+    const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(WORKSPACE_DIR, filePath);
+
+    if (!isSafePath(resolved)) {
+      return {
+        content: [{ type: "text", text: `[Error: Access denied. Path is outside of allowed directories.]` }],
+        isError: true
+      };
+    }
+
     try {
       await fs.mkdir(path.dirname(resolved), { recursive: true });
       await fs.writeFile(resolved, content, "utf-8");
