@@ -34,18 +34,20 @@ function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
       timeout: timeoutMs
     });
 
-    let stdout = "";
-    let stderr = "";
+    const stdoutChunks = [];
+    const stderrChunks = [];
 
     child.stdout.on("data", (data) => {
-      stdout += data.toString("utf-8");
+      stdoutChunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
     });
 
     child.stderr.on("data", (data) => {
-      stderr += data.toString("utf-8");
+      stderrChunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
     });
 
     child.on("close", (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
+      const stderr = Buffer.concat(stderrChunks).toString("utf-8");
       const output = stdout.trim();
       const err = stderr.trim();
       if (code === 0) {
