@@ -166,10 +166,13 @@ server.tool(
     sqlQuery: z.string().describe("SQL query to run over local CSV/Parquet data via DuckDB in Python.")
   },
   async ({ sqlQuery }) => {
+    const sqlQueryB64 = Buffer.from(sqlQuery).toString("base64");
     const script = `
 import duckdb
+import base64
 con = duckdb.connect()
-df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
+sql_query = base64.b64decode("${sqlQueryB64}").decode("utf-8")
+df = con.execute(sql_query).df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
     const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
@@ -203,21 +206,30 @@ server.tool(
     recipient: z.string().default("huynhbao@asu.edu").describe("Recipient email address.")
   },
   async ({ subject, bodyText, recipient }) => {
+    const subjectB64 = Buffer.from(subject).toString("base64");
+    const bodyTextB64 = Buffer.from(bodyText).toString("base64");
+    const recipientB64 = Buffer.from(recipient).toString("base64");
+
     const script = `
 import smtplib
+import base64
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-msg = MIMEText("""${bodyText.replace(/"/g, '\\"')}""", "plain", "utf-8")
+subject_decoded = base64.b64decode("${subjectB64}").decode("utf-8")
+body_decoded = base64.b64decode("${bodyTextB64}").decode("utf-8")
+recipient_decoded = base64.b64decode("${recipientB64}").decode("utf-8")
+
+msg = MIMEText(body_decoded, "plain", "utf-8")
 msg["From"] = formataddr(("Claude & Gemini Spark Copilot", "thuaquan228@gmail.com"))
-msg["To"] = formataddr(("Gia Bao Huynh (Jun)", "${recipient}"))
-msg["Subject"] = """${subject.replace(/"/g, '\\"')}"""
+msg["To"] = formataddr(("Gia Bao Huynh (Jun)", recipient_decoded))
+msg["Subject"] = subject_decoded
 
 with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.starttls()
     server.login("thuaquan228@gmail.com", "tftgqgjmfifdmtzz")
     server.send_message(msg)
-print("[✓ Email sent successfully to ${recipient}]")
+print("[✓ Email sent successfully to " + recipient_decoded + "]")
 `;
     const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
     return {
