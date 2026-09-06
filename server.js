@@ -25,6 +25,42 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
+// Helper for safe command execution without shell interpretation
+function runCommand(executable, args, customEnv = {}, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
+  return new Promise((resolve) => {
+    const child = spawn(executable, args, {
+      cwd,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8", ...customEnv },
+      timeout: timeoutMs
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString("utf-8");
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString("utf-8");
+    });
+
+    child.on("close", (code) => {
+      const output = stdout.trim();
+      const err = stderr.trim();
+      if (code === 0) {
+        resolve(output || "[Command finished successfully with no stdout]");
+      } else {
+        resolve(`[Exit Code ${code}]\n${output}\n${err ? "STDERR:\n" + err : ""}`);
+      }
+    });
+
+    child.on("error", (err) => {
+      resolve(`[Process Error]: ${err.message}`);
+    });
+  });
+}
+
 // Helper for command execution
 function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
@@ -68,8 +104,7 @@ server.tool(
     code: z.string().describe("Python 3.14 code to execute. Has access to numpy, scipy, pandas, duckdb, boto3, sympy, matplotlib.")
   },
   async ({ code }) => {
-    const escapedCode = code.replace(/"/g, '\\"');
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
+    const result = await runCommand(PYTHON_EXE, ["-c", code]);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -168,11 +203,13 @@ server.tool(
   async ({ sqlQuery }) => {
     const script = `
 import duckdb
+import os
 con = duckdb.connect()
-df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
+query = os.environ.get("DUCKDB_QUERY", "")
+df = con.execute(query).df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await runCommand(PYTHON_EXE, ["-c", script], { DUCKDB_QUERY: sqlQuery });
     return {
       content: [{ type: "text", text: result }]
     };
@@ -187,7 +224,7 @@ server.tool(
     notebookId: z.string().default("24fb3456-0d1a-4e3d-864b-952523aa982f").describe("Notebook UUID (defaults to Antigravity RESEARCH SANDBOX).")
   },
   async ({ query, notebookId }) => {
-    const result = await runPowerShell(`& "${NLM_EXE}" query "${notebookId}" "${query.replace(/"/g, '`"')}"`);
+    const result = await runCommand(NLM_EXE, ["query", notebookId, query]);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -205,21 +242,30 @@ server.tool(
   async ({ subject, bodyText, recipient }) => {
     const script = `
 import smtplib
+import os
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
-msg = MIMEText("""${bodyText.replace(/"/g, '\\"')}""", "plain", "utf-8")
+body = os.environ.get("EMAIL_BODY", "")
+subject = os.environ.get("EMAIL_SUBJECT", "")
+recipient = os.environ.get("EMAIL_RECIPIENT", "")
+
+msg = MIMEText(body, "plain", "utf-8")
 msg["From"] = formataddr(("Claude & Gemini Spark Copilot", "thuaquan228@gmail.com"))
-msg["To"] = formataddr(("Gia Bao Huynh (Jun)", "${recipient}"))
-msg["Subject"] = """${subject.replace(/"/g, '\\"')}"""
+msg["To"] = formataddr(("Gia Bao Huynh (Jun)", recipient))
+msg["Subject"] = subject
 
 with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.starttls()
     server.login("thuaquan228@gmail.com", "tftgqgjmfifdmtzz")
     server.send_message(msg)
-print("[✓ Email sent successfully to ${recipient}]")
+print(f"[✓ Email sent successfully to {recipient}]")
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await runCommand(PYTHON_EXE, ["-c", script], {
+      EMAIL_SUBJECT: subject,
+      EMAIL_BODY: bodyText,
+      EMAIL_RECIPIENT: recipient
+    });
     return {
       content: [{ type: "text", text: result }]
     };
