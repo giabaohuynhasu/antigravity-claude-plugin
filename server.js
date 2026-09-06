@@ -13,11 +13,11 @@ import fs from "fs/promises";
 import path from "path";
 
 // Configuration Constants
-const WORKSPACE_DIR = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch";
-const VAULT_DIR = "C:\\Users\\nswcl\\OneDrive\\Documents\\Obsidian Vault";
-const CLAUDE_USER_DIR = "C:\\Users\\nswcl\\Claude";
-const PYTHON_EXE = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch\\.venv\\Scripts\\python.exe";
-const NLM_EXE = "C:\\Users\\nswcl\\.local\\bin\\nlm.exe";
+const WORKSPACE_DIR = process.env.WORKSPACE_DIR || "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch";
+const VAULT_DIR = process.env.VAULT_DIR || "C:\\Users\\nswcl\\OneDrive\\Documents\\Obsidian Vault";
+const CLAUDE_USER_DIR = process.env.CLAUDE_USER_DIR || "C:\\Users\\nswcl\\Claude";
+const PYTHON_EXE = process.env.PYTHON_EXE || "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch\\.venv\\Scripts\\python.exe";
+const NLM_EXE = process.env.NLM_EXE || "C:\\Users\\nswcl\\.local\\bin\\nlm.exe";
 
 // Initialize MCP Server
 const server = new McpServer({
