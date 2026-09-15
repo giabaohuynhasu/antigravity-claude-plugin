@@ -19,6 +19,20 @@ const CLAUDE_USER_DIR = "C:\\Users\\nswcl\\Claude";
 const PYTHON_EXE = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch\\.venv\\Scripts\\python.exe";
 const NLM_EXE = "C:\\Users\\nswcl\\.local\\bin\\nlm.exe";
 
+// Helper for path validation
+function isSafePath(targetPath) {
+  const resolvedTarget = path.resolve(targetPath);
+  const allowedDirs = [
+    path.resolve(WORKSPACE_DIR),
+    path.resolve(VAULT_DIR),
+    path.resolve(CLAUDE_USER_DIR)
+  ];
+  return allowedDirs.some(dir => {
+    const rel = path.relative(dir, resolvedTarget);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  });
+}
+
 // Initialize MCP Server
 const server = new McpServer({
   name: "antigravity-copilot",
@@ -121,6 +135,13 @@ server.tool(
       }
     }
 
+    if (!isSafePath(resolved)) {
+      return {
+        content: [{ type: "text", text: `[Error: Access denied. Path is outside allowed directories: ${resolved}]` }],
+        isError: true
+      };
+    }
+
     try {
       const data = await fs.readFile(resolved, "utf-8");
       return {
@@ -144,6 +165,14 @@ server.tool(
   },
   async ({ filePath, content }) => {
     const resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
+
+    if (!isSafePath(resolved)) {
+      return {
+        content: [{ type: "text", text: `[Error: Access denied. Path is outside allowed directories: ${resolved}]` }],
+        isError: true
+      };
+    }
+
     try {
       await fs.mkdir(path.dirname(resolved), { recursive: true });
       await fs.writeFile(resolved, content, "utf-8");
