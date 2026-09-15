@@ -26,7 +26,7 @@ const server = new McpServer({
 });
 
 // Helper for command execution
-function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
+export function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
     const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
       cwd,
