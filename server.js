@@ -8,7 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { exec, spawn } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 
