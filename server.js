@@ -11,6 +11,8 @@ import { z } from "zod";
 import { exec, spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
+import crypto from "crypto";
 
 // Configuration Constants
 const WORKSPACE_DIR = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch";
@@ -68,11 +70,54 @@ server.tool(
     code: z.string().describe("Python 3.14 code to execute. Has access to numpy, scipy, pandas, duckdb, boto3, sympy, matplotlib.")
   },
   async ({ code }) => {
-    const escapedCode = code.replace(/"/g, '\\"');
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
-    return {
-      content: [{ type: "text", text: result }]
-    };
+    const tmpFileName = `script_${crypto.randomBytes(8).toString("hex")}.py`;
+    const tmpFilePath = path.join(os.tmpdir(), tmpFileName);
+    try {
+      await fs.writeFile(tmpFilePath, code, "utf-8");
+
+      const result = await new Promise((resolve) => {
+        const child = spawn(PYTHON_EXE, [tmpFilePath], {
+          cwd: WORKSPACE_DIR,
+          env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+          timeout: 120000
+        });
+
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", (data) => {
+          stdout += data.toString("utf-8");
+        });
+
+        child.stderr.on("data", (data) => {
+          stderr += data.toString("utf-8");
+        });
+
+        child.on("close", (exitCode) => {
+          const output = stdout.trim();
+          const err = stderr.trim();
+          if (exitCode === 0) {
+            resolve(output || "[Command finished successfully with no stdout]");
+          } else {
+            resolve(`[Exit Code ${exitCode}]\n${output}\n${err ? "STDERR:\n" + err : ""}`);
+          }
+        });
+
+        child.on("error", (err) => {
+          resolve(`[Process Error]: ${err.message}`);
+        });
+      });
+
+      return {
+        content: [{ type: "text", text: result }]
+      };
+    } finally {
+      try {
+        await fs.unlink(tmpFilePath);
+      } catch (err) {
+        // Ignore errors during cleanup
+      }
+    }
   }
 );
 
