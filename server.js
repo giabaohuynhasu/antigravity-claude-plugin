@@ -19,6 +19,17 @@ const CLAUDE_USER_DIR = "C:\\Users\\nswcl\\Claude";
 const PYTHON_EXE = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch\\.venv\\Scripts\\python.exe";
 const NLM_EXE = "C:\\Users\\nswcl\\.local\\bin\\nlm.exe";
 
+// Helper for path validation
+function isPathAllowed(resolvedPath) {
+  const allowedDirs = [WORKSPACE_DIR, VAULT_DIR, CLAUDE_USER_DIR];
+  return allowedDirs.some((dir) => {
+    // We use path.win32 to explicitly handle Windows-style paths as
+    // configured in the constants above.
+    const rel = path.win32.relative(dir, resolvedPath);
+    return rel === "" || (!rel.startsWith("..") && !path.win32.isAbsolute(rel));
+  });
+}
+
 // Initialize MCP Server
 const server = new McpServer({
   name: "antigravity-copilot",
@@ -97,7 +108,14 @@ server.tool(
     filePath: z.string().describe("Relative or absolute path to read from Antigravity workspace, Claude folder, or Obsidian Vault.")
   },
   async ({ filePath }) => {
-    let resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
+    let resolved = path.win32.resolve(path.win32.isAbsolute(filePath) ? filePath : path.win32.join(WORKSPACE_DIR, filePath));
+    if (!isPathAllowed(resolved)) {
+      return {
+        content: [{ type: "text", text: `[Read Error: Access denied. Path is outside allowed directories.]` }],
+        isError: true
+      };
+    }
+
     try {
       await fs.access(resolved);
     } catch {
@@ -143,7 +161,13 @@ server.tool(
     content: z.string().describe("Content to write into the file.")
   },
   async ({ filePath, content }) => {
-    const resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
+    const resolved = path.win32.resolve(path.win32.isAbsolute(filePath) ? filePath : path.win32.join(WORKSPACE_DIR, filePath));
+    if (!isPathAllowed(resolved)) {
+      return {
+        content: [{ type: "text", text: `[Write Error: Access denied. Path is outside allowed directories.]` }],
+        isError: true
+      };
+    }
     try {
       await fs.mkdir(path.dirname(resolved), { recursive: true });
       await fs.writeFile(resolved, content, "utf-8");
