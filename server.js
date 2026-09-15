@@ -166,10 +166,13 @@ server.tool(
     sqlQuery: z.string().describe("SQL query to run over local CSV/Parquet data via DuckDB in Python.")
   },
   async ({ sqlQuery }) => {
+    const sqlQueryBase64 = Buffer.from(sqlQuery).toString("base64");
     const script = `
 import duckdb
+import base64
 con = duckdb.connect()
-df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
+query = base64.b64decode("${sqlQueryBase64}").decode('utf-8')
+df = con.execute(query).df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
     const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
