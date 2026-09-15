@@ -204,6 +204,7 @@ server.tool(
   },
   async ({ subject, bodyText, recipient }) => {
     const script = `
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.utils import formataddr
@@ -215,7 +216,7 @@ msg["Subject"] = """${subject.replace(/"/g, '\\"')}"""
 
 with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.starttls()
-    server.login("thuaquan228@gmail.com", "tftgqgjmfifdmtzz")
+    server.login("thuaquan228@gmail.com", os.environ.get("SMTP_PASSWORD"))
     server.send_message(msg)
 print("[✓ Email sent successfully to ${recipient}]")
 `;
