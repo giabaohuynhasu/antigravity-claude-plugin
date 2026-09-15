@@ -11,6 +11,8 @@ import { z } from "zod";
 import { exec, spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
+import crypto from "crypto";
 
 // Configuration Constants
 const WORKSPACE_DIR = "C:\\Users\\nswcl\\.gemini\\antigravity-ide\\scratch";
@@ -25,8 +27,44 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
+// Helper for direct execution avoiding command injection
+export function runProcess(executable, args, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
+  return new Promise((resolve) => {
+    const child = spawn(executable, args, {
+      cwd,
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+      timeout: timeoutMs
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString("utf-8");
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString("utf-8");
+    });
+
+    child.on("close", (code) => {
+      const output = stdout.trim();
+      const err = stderr.trim();
+      if (code === 0) {
+        resolve(output || "[Command finished successfully with no stdout]");
+      } else {
+        resolve(`[Exit Code ${code}]\n${output}\n${err ? "STDERR:\n" + err : ""}`);
+      }
+    });
+
+    child.on("error", (err) => {
+      resolve(`[Process Error]: ${err.message}`);
+    });
+  });
+}
+
 // Helper for command execution
-function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
+export function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
     const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], {
       cwd,
@@ -68,11 +106,22 @@ server.tool(
     code: z.string().describe("Python 3.14 code to execute. Has access to numpy, scipy, pandas, duckdb, boto3, sympy, matplotlib.")
   },
   async ({ code }) => {
-    const escapedCode = code.replace(/"/g, '\\"');
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
-    return {
-      content: [{ type: "text", text: result }]
-    };
+    const tempFileName = `calc_${crypto.randomBytes(16).toString("hex")}.py`;
+    const tempFilePath = path.join(os.tmpdir(), tempFileName);
+
+    try {
+      await fs.writeFile(tempFilePath, code, "utf-8");
+      const result = await runProcess(PYTHON_EXE, [tempFilePath]);
+      return {
+        content: [{ type: "text", text: result }]
+      };
+    } finally {
+      try {
+        await fs.unlink(tempFilePath);
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+    }
   }
 );
 
