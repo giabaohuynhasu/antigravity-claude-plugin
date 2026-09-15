@@ -97,28 +97,28 @@ server.tool(
     filePath: z.string().describe("Relative or absolute path to read from Antigravity workspace, Claude folder, or Obsidian Vault.")
   },
   async ({ filePath }) => {
-    let resolved = path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath);
-    try {
-      await fs.access(resolved);
-    } catch {
-      // Check in Obsidian Vault
-      const vaultPath = path.join(VAULT_DIR, filePath);
+    const pathsToTry = [
+      path.isAbsolute(filePath) ? filePath : path.join(WORKSPACE_DIR, filePath),
+      path.join(VAULT_DIR, filePath),
+      path.join(CLAUDE_USER_DIR, filePath)
+    ];
+
+    let resolved = null;
+    for (const p of pathsToTry) {
       try {
-        await fs.access(vaultPath);
-        resolved = vaultPath;
+        await fs.access(p);
+        resolved = p;
+        break;
       } catch {
-        // Check in Claude folder
-        const claudePath = path.join(CLAUDE_USER_DIR, filePath);
-        try {
-          await fs.access(claudePath);
-          resolved = claudePath;
-        } catch {
-          return {
-            content: [{ type: "text", text: `[Error: File not found in workspace, vault, or Claude folder: ${filePath}]` }],
-            isError: true
-          };
-        }
+        continue;
       }
+    }
+
+    if (!resolved) {
+      return {
+        content: [{ type: "text", text: `[Error: File not found in workspace, vault, or Claude folder: ${filePath}]` }],
+        isError: true
+      };
     }
 
     try {
