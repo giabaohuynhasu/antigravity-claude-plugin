@@ -25,6 +25,117 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
+const pythonDaemonCode = `
+import sys, base64, io, traceback, json
+from contextlib import redirect_stdout, redirect_stderr
+
+def main():
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            break
+        line = line.strip()
+        if not line:
+            continue
+
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            code = base64.b64decode(line).decode('utf-8')
+            with redirect_stdout(out), redirect_stderr(err):
+                try:
+                    exec(code, globals())
+                except Exception:
+                    traceback.print_exc()
+        except Exception as e:
+            err.write(str(e))
+
+        res = {"stdout": out.getvalue(), "stderr": err.getvalue()}
+        res_str = base64.b64encode(json.dumps(res).encode('utf-8')).decode('utf-8')
+        sys.stdout.write("__DAEMON_RES__:" + res_str + "\\n")
+        sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()
+`;
+
+let pythonDaemonProcess = null;
+const pythonTaskQueue = [];
+let pythonBuffer = "";
+
+function executePythonInDaemon(code, timeoutMs = 120000) {
+  return new Promise((resolve, reject) => {
+    if (!pythonDaemonProcess) {
+      pythonDaemonProcess = spawn(PYTHON_EXE, ["-c", pythonDaemonCode], {
+        cwd: WORKSPACE_DIR,
+        env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+      });
+
+      const handleExit = (err) => {
+        const error = err instanceof Error ? err : new Error("Python daemon exited unexpectedly");
+        while (pythonTaskQueue.length > 0) {
+          const task = pythonTaskQueue.shift();
+          task.reject(error);
+          clearTimeout(task.timeoutId);
+        }
+        pythonDaemonProcess = null;
+        pythonBuffer = "";
+      };
+
+      pythonDaemonProcess.on("error", handleExit);
+      pythonDaemonProcess.on("exit", handleExit);
+      pythonDaemonProcess.on("close", handleExit);
+
+      pythonDaemonProcess.stdout.on("data", (chunk) => {
+        pythonBuffer += chunk.toString("utf-8");
+        let newlineIndex;
+        while ((newlineIndex = pythonBuffer.indexOf("\n")) !== -1) {
+          const line = pythonBuffer.slice(0, newlineIndex).trim();
+          pythonBuffer = pythonBuffer.slice(newlineIndex + 1);
+
+          if (line.startsWith("__DAEMON_RES__:_") || line.startsWith("__DAEMON_RES__:")) {
+            const base64Str = line.replace("__DAEMON_RES__:", "").trim();
+            const task = pythonTaskQueue.shift();
+            if (task) {
+              clearTimeout(task.timeoutId);
+              try {
+                const res = JSON.parse(Buffer.from(base64Str, "base64").toString("utf-8"));
+                let output = res.stdout;
+                if (res.stderr) {
+                  output += (output ? "\n" : "") + "STDERR:\n" + res.stderr;
+                }
+                task.resolve(output.trim() || "[Command finished successfully with no stdout]");
+              } catch (e) {
+                task.reject(new Error("Failed to parse daemon output: " + e.message));
+              }
+            }
+          }
+        }
+      });
+
+      pythonDaemonProcess.stderr.on("data", (chunk) => {
+        console.error("[Python Daemon STDERR]", chunk.toString("utf-8"));
+      });
+    }
+
+    const timeoutId = setTimeout(() => {
+      const index = pythonTaskQueue.findIndex(t => t.resolve === resolve);
+      if (index !== -1) {
+        pythonTaskQueue.splice(index, 1);
+        reject(new Error(`Python task timed out after ${timeoutMs}ms`));
+        // Force restart daemon because it's hanging
+        if (pythonDaemonProcess) {
+          pythonDaemonProcess.kill("SIGKILL");
+          pythonDaemonProcess = null;
+        }
+      }
+    }, timeoutMs);
+
+    pythonTaskQueue.push({ resolve, reject, timeoutId });
+    const encodedCode = Buffer.from(code).toString("base64");
+    pythonDaemonProcess.stdin.write(encodedCode + "\n");
+  });
+}
+
 // Helper for command execution
 function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
@@ -68,8 +179,7 @@ server.tool(
     code: z.string().describe("Python 3.14 code to execute. Has access to numpy, scipy, pandas, duckdb, boto3, sympy, matplotlib.")
   },
   async ({ code }) => {
-    const escapedCode = code.replace(/"/g, '\\"');
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${escapedCode}"`);
+    const result = await executePythonInDaemon(code);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -172,7 +282,7 @@ con = duckdb.connect()
 df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
 print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await executePythonInDaemon(script);
     return {
       content: [{ type: "text", text: result }]
     };
@@ -219,7 +329,7 @@ with smtplib.SMTP("smtp.gmail.com", 587) as server:
     server.send_message(msg)
 print("[✓ Email sent successfully to ${recipient}]")
 `;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
+    const result = await executePythonInDaemon(script);
     return {
       content: [{ type: "text", text: result }]
     };
