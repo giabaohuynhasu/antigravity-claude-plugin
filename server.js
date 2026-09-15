@@ -25,6 +25,83 @@ const server = new McpServer({
   version: "1.0.0"
 });
 
+// Daemon State
+let duckDbDaemon = null;
+const duckDbRequestQueue = [];
+
+function getDuckDbDaemon() {
+  if (!duckDbDaemon) {
+    const script = `
+import sys
+import base64
+import json
+import duckdb
+
+try:
+    con = duckdb.connect()
+except Exception as e:
+    sys.exit(f"DuckDB init error: {e}")
+
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        query = base64.b64decode(line).decode('utf-8')
+        df = con.execute(query).df()
+        output = df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False)
+        result = {"status": "success", "data": output}
+    except Exception as e:
+        result = {"status": "error", "error": str(e)}
+
+    print(base64.b64encode(json.dumps(result).encode('utf-8')).decode('utf-8'))
+    sys.stdout.flush()
+`;
+
+    duckDbDaemon = spawn(PYTHON_EXE, ["-c", script], {
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" }
+    });
+
+    let buffer = "";
+    duckDbDaemon.stdout.on("data", (data) => {
+      buffer += data.toString("utf-8");
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 1);
+        if (line) {
+          try {
+            const decoded = Buffer.from(line, 'base64').toString('utf-8');
+            const result = JSON.parse(decoded);
+            const req = duckDbRequestQueue.shift();
+            if (req) {
+              if (result.status === "success") {
+                req.resolve(result.data);
+              } else {
+                req.reject(new Error(result.error));
+              }
+            }
+          } catch (err) {
+            console.error("Failed to parse daemon response:", err);
+          }
+        }
+      }
+    });
+
+    duckDbDaemon.stderr.on("data", (data) => {
+      console.error("[DuckDB Daemon Error]:", data.toString());
+    });
+
+    duckDbDaemon.on("close", () => {
+      duckDbDaemon = null;
+      while (duckDbRequestQueue.length > 0) {
+        duckDbRequestQueue.shift().reject(new Error("Daemon closed unexpectedly"));
+      }
+    });
+  }
+  return duckDbDaemon;
+}
+
 // Helper for command execution
 function runPowerShell(command, cwd = WORKSPACE_DIR, timeoutMs = 120000) {
   return new Promise((resolve) => {
@@ -166,16 +243,22 @@ server.tool(
     sqlQuery: z.string().describe("SQL query to run over local CSV/Parquet data via DuckDB in Python.")
   },
   async ({ sqlQuery }) => {
-    const script = `
-import duckdb
-con = duckdb.connect()
-df = con.execute("""${sqlQuery.replace(/"/g, '\\"')}""").df()
-print(df.to_markdown(index=False) if hasattr(df, 'to_markdown') else df.to_string(index=False))
-`;
-    const result = await runPowerShell(`& "${PYTHON_EXE}" -c "${script.replace(/"/g, '\\"')}"`);
-    return {
-      content: [{ type: "text", text: result }]
-    };
+    try {
+      const result = await new Promise((resolve, reject) => {
+        duckDbRequestQueue.push({ resolve, reject });
+        const daemon = getDuckDbDaemon();
+        const encoded = Buffer.from(sqlQuery).toString("base64");
+        daemon.stdin.write(encoded + "\n");
+      });
+      return {
+        content: [{ type: "text", text: result }]
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `[DuckDB Error: ${e.message}]` }],
+        isError: true
+      };
+    }
   }
 );
 
