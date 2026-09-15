@@ -234,7 +234,11 @@ async function main() {
   console.error("⚡ Antigravity Node MCP Server running on stdio transport");
 }
 
-main().catch((err) => {
-  console.error("Fatal server error:", err);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    console.error("Fatal server error:", err);
+    process.exit(1);
+  });
+}
+
+export { runPowerShell };
